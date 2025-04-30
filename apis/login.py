@@ -7,7 +7,7 @@ import random
 import string
 from flask_mail import Message
 from extensions import db, mail
-
+from decrypt_key import rsa_decrypt_pkcs1v15
 
 # 创建 Blueprint
 login_bp = Blueprint('login', __name__)
@@ -21,11 +21,11 @@ def login():
 
         if not username or not password:
             return jsonify({"success": False, "message": "用户名和密码不能为空"}), 400
-
+        decrpty_password=rsa_decrypt_pkcs1v15(password)
         # 查找用户
         user = User.query.filter_by(username=username).first()
 
-        if user and bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
+        if user and bcrypt.checkpw(decrpty_password.encode('utf-8'), user.password.encode('utf-8')):
             # 生成JWT Token
             token = generate_token(user.id)
 
@@ -130,36 +130,7 @@ def verify_code():
     email = request.json.get('email')
     code = request.json.get('code')
     return verify_email_code(email,code)
-# 验证邮箱验证码
-def verify_email_code(email,code):
-    existing_code = EmailCode.query.filter_by(email=email).first()
 
-    if not existing_code:
-        return {
-            "success": False,
-            "message": "验证码无效或已过期",
-            "data": {}
-        }
-
-    if existing_code.created_at + timedelta(minutes=10) < datetime.now():
-        return {
-            "success": False,
-            "message": "验证码已过期，请重新获取",
-            "data": {}
-        }
-
-    if existing_code.code != code:
-        return {
-            "success": False,
-            "message": "验证码错误",
-            "data": {}
-        }
-
-    return {
-        "success": True,
-        "message": "验证成功",
-        "data": {}
-    }
 # 发送邮箱验证码
 @login_bp.route('/send-email-code', methods=['POST'])
 def send_email_code():
@@ -204,7 +175,36 @@ def send_email_code():
             return jsonify({"success": False, "message": "验证码发送失败，请重试", "error": str(e)}), 500
 
 
+# 验证邮箱验证码
+def verify_email_code(email,code):
+    existing_code = EmailCode.query.filter_by(email=email).first()
 
+    if not existing_code:
+        return {
+            "success": False,
+            "message": "验证码无效或已过期",
+            "data": {}
+        }
+
+    if existing_code.created_at + timedelta(minutes=10) < datetime.now():
+        return {
+            "success": False,
+            "message": "验证码已过期，请重新获取",
+            "data": {}
+        }
+
+    if existing_code.code != code:
+        return {
+            "success": False,
+            "message": "验证码错误",
+            "data": {}
+        }
+
+    return {
+        "success": True,
+        "message": "验证成功",
+        "data": {}
+    }
 # 生成JWT Token
 def generate_token(user_id, days=30):
     expiration_time = datetime.now() + timedelta(days=days)
@@ -213,3 +213,4 @@ def generate_token(user_id, days=30):
         'exp': expiration_time
     }, current_app.config['SECRET_KEY'], algorithm='HS256')
     return token
+
