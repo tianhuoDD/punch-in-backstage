@@ -16,15 +16,17 @@ login_bp = Blueprint('login', __name__)
 @login_bp.route('/login', methods=['POST'])
 def login():
     try:
-        username = request.json.get('username')
+        username_or_email = request.json.get('username')
         password = request.json.get('password')
 
-        if not username or not password:
+        if not username_or_email or not password:
             return jsonify({"success": False, "message": "用户名和密码不能为空"}), 400
-        decrpty_password=rsa_decrypt_pkcs1v15(password)
-        # 查找用户
-        user = User.query.filter_by(username=username).first()
 
+        decrpty_password=rsa_decrypt_pkcs1v15(password)
+        # 使用用户名或邮箱进行查找
+        user = User.query.filter(
+            (User.username == username_or_email) | (User.email == username_or_email)
+        ).first()
         if user and bcrypt.checkpw(decrpty_password.encode('utf-8'), user.password.encode('utf-8')):
             # 生成JWT Token
             token = generate_token(user.id)

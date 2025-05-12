@@ -49,4 +49,4 @@ app.register_blueprint(transaction_bp, url_prefix="/transaction")
 app.register_blueprint(svg_bp, url_prefix="/svg")
 
 if __name__ == '__main__':
-    app.run(host=os.getenv('APP_HOST'), port=int(os.getenv('APP_PORT')), debug=os.getenv('FLASK_DEBUG') == 'True')
+    app.run(host=os.getenv('APP_HOST'), port=int(os.getenv('APP_PORT')), debug=os.getenv('FLASK_DEBUG'))
