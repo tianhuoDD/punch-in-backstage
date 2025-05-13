@@ -1,16 +1,19 @@
+
 import bcrypt
 import jwt
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, timedelta
-from models import User, UserDetails, UserSvg, DefaultSvg,EmailCode
+from utils.models import User, UserDetails, UserSvg, DefaultSvg,EmailCode
 import random
 import string
 from flask_mail import Message
-from extensions import db, mail
-from decrypt_key import rsa_decrypt_pkcs1v15
+from utils.extensions import db, mail
+from utils.decrypt_key import rsa_decrypt_pkcs1v15
+from utils.logger import logger  # 新增引入日志模块
 
 # 创建 Blueprint
 login_bp = Blueprint('login', __name__)
+
 
 # 登录
 @login_bp.route('/login', methods=['POST'])
@@ -20,6 +23,7 @@ def login():
         password = request.json.get('password')
 
         if not username_or_email or not password:
+            logger.warning("登录失败: 用户名或密码为空")
             return jsonify({"success": False, "message": "用户名和密码不能为空"}), 400
 
         decrpty_password=rsa_decrypt_pkcs1v15(password)
@@ -34,6 +38,7 @@ def login():
             # 获取用户详情
             user_details = UserDetails.query.filter_by(user_id=user.id).first()
 
+            logger.info(f"用户 {username_or_email} 登录成功")
             return jsonify({
                 "success": True,
                 "message": "登录成功",
@@ -50,10 +55,13 @@ def login():
                 }
             }), 200
         else:
+            logger.warning(f"登录失败: 用户名或密码错误, 用户名: {username_or_email}")
             return jsonify({"success": False, "message": "用户名或密码错误"}), 401
 
     except Exception as e:
+        logger.error(f"登录失败: {str(e)}")
         return jsonify({"success": False, "message": "登录失败", "error": str(e)}), 500
+
 # 注册
 @login_bp.route('/register', methods=['POST'])
 def register():
@@ -63,10 +71,12 @@ def register():
         email = request.json.get('email')
 
         if not username or not password or not email:
+            logger.warning("注册失败: 用户名、密码或邮箱为空")
             return jsonify({"success": False, "message": "用户名、密码、邮箱和验证码不能为空"}), 400
 
         # 检查用户名或邮箱是否已存在
         if User.query.filter((User.username == username) | (User.email == email)).first():
+            logger.warning(f"注册失败: 用户名或邮箱已存在, 用户名: {username}, 邮箱: {email}")
             return jsonify({"success": False, "message": "用户名或邮箱已存在"}), 400
 
         # 加密密码
@@ -87,10 +97,12 @@ def register():
         db.session.bulk_save_objects(user_svgs)
 
         db.session.commit()  # 提交事务
+        logger.info(f"用户 {username} 注册成功")
         return jsonify({"success": True, "message": "注册成功，请登录"}), 201
 
     except Exception as e:
         db.session.rollback()  # 发生错误时回滚事务
+        logger.error(f"注册失败: {str(e)}")
         return jsonify({"success": False, "message": "注册失败，请重试", "error": str(e)}), 500
 
 # 重置密码
@@ -105,14 +117,17 @@ def forget_password():
         verification_result = verify_email_code(email, code)
         # 如果验证码验证失败，直接返回错误信息
         if not verification_result['success']:
+            logger.warning(f"重置密码失败: 验证码验证失败, 邮箱: {email}")
             return jsonify(verification_result), 400
 
         if not email or not password:
+            logger.warning("重置密码失败: 邮箱或密码为空")
             return jsonify({"success": False, "message": "邮箱、密码不能为空"}), 400
 
         # 查询用户
         user = User.query.filter_by(email=email).first()
         if not user:
+            logger.warning(f"重置密码失败: 邮箱未注册, 邮箱: {email}")
             return jsonify({"success": False, "message": "该邮箱未注册"}), 404
 
         # 更新密码（加密）
@@ -120,10 +135,12 @@ def forget_password():
         user.password = hashed_password
         db.session.commit()
 
+        logger.info(f"用户 {email} 重置密码成功")
         return jsonify({"success": True, "message": "密码修改成功，请登录"}), 200
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"重置密码失败: {str(e)}")
         return jsonify({"success": False, "message": "密码修改失败，请重试", "error": str(e)}), 500
 
 # 验证邮箱验证码
@@ -141,10 +158,12 @@ def send_email_code():
         repeatability = request.json.get('repeatability', True)  # 如果没有提供 repeatability，默认为 True
 
         if not email:
+            logger.warning("发送邮箱验证码失败: 邮箱为空")
             return jsonify({"success": False, "message": "邮箱不能为空"}), 400
 
         # 验证邮箱是否已注册（可选逻辑）
         if User.query.filter_by(email=email).first() and repeatability:
+            logger.warning(f"发送邮箱验证码失败: 邮箱已注册, 邮箱: {email}")
             return jsonify({"success": False, "message": "该邮箱已注册,请重新输入"}), 400
 
         # 生成6位验证码
@@ -166,22 +185,25 @@ def send_email_code():
         msg = Message(subject=subject, recipients=[email], body=body)
         mail.send(msg)
 
+        logger.info(f"邮箱验证码已发送至 {email}")
         return jsonify({"success": True, "message": "验证码已发送,请查看邮箱..."}), 200
 
     except Exception as e:
         db.session.rollback()
         # 判断错误信息中是否包含 '550'，代表邮箱不存在
         if '550' in str(e):
+            logger.error(f"发送邮箱验证码失败: 邮箱不存在, 邮箱: {email}")
             return jsonify({"success": False, "message": "邮箱不存在，请检查邮箱", "error": str(e)}), 500
         else:
+            logger.error(f"发送邮箱验证码失败: {str(e)}")
             return jsonify({"success": False, "message": "验证码发送失败，请重试", "error": str(e)}), 500
-
 
 # 验证邮箱验证码
 def verify_email_code(email,code):
     existing_code = EmailCode.query.filter_by(email=email).first()
 
     if not existing_code:
+        logger.warning(f"验证邮箱验证码失败: 验证码无效或已过期, 邮箱: {email}")
         return {
             "success": False,
             "message": "验证码无效或已过期",
@@ -189,6 +211,7 @@ def verify_email_code(email,code):
         }
 
     if existing_code.created_at + timedelta(minutes=10) < datetime.now():
+        logger.warning(f"验证邮箱验证码失败: 验证码已过期, 邮箱: {email}")
         return {
             "success": False,
             "message": "验证码已过期，请重新获取",
@@ -196,17 +219,20 @@ def verify_email_code(email,code):
         }
 
     if existing_code.code != code:
+        logger.warning(f"验证邮箱验证码失败: 验证码错误, 邮箱: {email}")
         return {
             "success": False,
             "message": "验证码错误",
             "data": {}
         }
 
+    logger.info(f"邮箱验证码验证成功, 邮箱: {email}")
     return {
         "success": True,
         "message": "验证成功",
         "data": {}
     }
+
 # 生成JWT Token
 def generate_token(user_id, days=30):
     expiration_time = datetime.now() + timedelta(days=days)
@@ -215,4 +241,3 @@ def generate_token(user_id, days=30):
         'exp': expiration_time
     }, current_app.config['SECRET_KEY'], algorithm='HS256')
     return token
-

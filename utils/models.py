@@ -1,4 +1,4 @@
-from extensions import db, mail
+from utils.extensions import db
 from datetime import datetime
 
 # 用户表

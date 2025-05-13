@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -7,15 +8,36 @@ from apis.login import login_bp
 from apis.user import user_bp
 from apis.transactions import transaction_bp
 from apis.svg import svg_bp
-from extensions import db, mail
+from utils.extensions import db, mail
 
 # 加载 .env 配置
 load_dotenv()
 # 初始化 Flask 应用
 app = Flask(__name__)
-
 # 启用 CORS 允许跨域请求
 CORS(app, supports_credentials=True)
+# ====================
+# 日志配置
+# ====================
+# 创建日志目录
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# 配置日志格式
+formatter = logging.Formatter(
+    "[%(asctime)s] %(levelname)s in %(module)s: %(message)s"
+)
+# 设置文件日志处理器（记录到文件）
+file_handler = logging.FileHandler(os.path.join(log_dir, "app.log"), encoding="utf-8")
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+# 获取 Flask 默认 logger 并添加 handler
+logger = app.logger
+logger.setLevel(logging.DEBUG)  # 设置最低日志级别
+logger.addHandler(file_handler)
+
 
 # ====================
 # 数据库配置
@@ -49,4 +71,4 @@ app.register_blueprint(transaction_bp, url_prefix="/transaction")
 app.register_blueprint(svg_bp, url_prefix="/svg")
 
 if __name__ == '__main__':
-    app.run(host=os.getenv('APP_HOST'), port=int(os.getenv('APP_PORT')), debug=os.getenv('FLASK_DEBUG'))
+    app.run(host=os.getenv('APP_HOST'), port=int(os.getenv('APP_PORT')), debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')

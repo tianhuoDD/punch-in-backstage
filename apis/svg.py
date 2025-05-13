@@ -1,9 +1,12 @@
 from flask import Blueprint, request, jsonify
-from models import SVG,UserSvg  # 确保模型导入正确
-from auth import token_required  # 令牌认证装饰器
-from extensions import db
+from utils.models import SVG,UserSvg  # 确保模型导入正确
+from utils.auth import token_required  # 令牌认证装饰器
+from utils.extensions import db
+from utils.logger import logger  # 新增引入日志模块
+
 # 创建 Blueprint
 svg_bp = Blueprint('svg', __name__)
+
 # 获取所有svg
 @svg_bp.route('/', methods=['GET'])
 @token_required
@@ -18,6 +21,7 @@ def get_svgs(decoded):
         # 直接转换为扁平化的 JSON 数组
         svg_list = [{"id": svg.id, "svg_name": svg.svg_name, "category": svg.category} for svg in svgs]
 
+        logger.info("获取所有SVG成功")
         return jsonify({
             "success": True,
             "message": "获取SVG成功",
@@ -25,6 +29,7 @@ def get_svgs(decoded):
         }), 200
 
     except Exception as e:
+        logger.error(f"获取所有SVG失败: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"获取SVG失败: {str(e)}",
@@ -48,7 +53,7 @@ def get_user_svgs(decoded):
         # 转换为扁平化的列表格式
         svg_list = [{"id": svg.id, "svg_name": svg.svg_name, "category": svg.category} for svg in user_svgs]
 
-
+        logger.info(f"获取用户 {user_id} 的SVG成功")
         return jsonify({
             "success": True,
             "message": "获取用户SVG成功",
@@ -56,12 +61,12 @@ def get_user_svgs(decoded):
         }), 200
 
     except Exception as e:
+        logger.error(f"获取用户 {user_id} 的SVG失败: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"获取用户SVG失败: {str(e)}",
             "data": []
         }), 500
-
 
 
 # 根据用户添加svg图标
@@ -78,6 +83,7 @@ def add_svg(decoded):
         category = data.get("category")
 
         if not svg_name or not category:
+            logger.warning("添加SVG失败: svg_name 和 category 不能为空")
             return jsonify({
                 "success": False,
                 "message": "svg_name 和 category 不能为空",
@@ -89,6 +95,7 @@ def add_svg(decoded):
         db.session.add(new_svg)
         db.session.commit()
 
+        logger.info(f"用户 {user_id} 添加SVG成功: {svg_name}")
         return jsonify({
             "success": True,
             "message": "SVG 添加成功",
@@ -101,6 +108,7 @@ def add_svg(decoded):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"用户 {user_id} 添加SVG失败: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"SVG 添加失败: {str(e)}",
@@ -122,6 +130,7 @@ def update_svg(decoded, svg_id):
         category = data.get("category")
 
         if not svg_name or not category:
+            logger.warning("更新SVG失败: svg_name 和 category 不能为空")
             return jsonify({
                 "success": False,
                 "message": "svg_name 和 category 不能为空",
@@ -132,6 +141,7 @@ def update_svg(decoded, svg_id):
         user_svg = UserSvg.query.filter_by(id=svg_id, user_id=user_id).first()
 
         if not user_svg:
+            logger.warning(f"更新SVG失败: 未找到对应的 SVG 或无权限修改, 用户ID: {user_id}, SVG ID: {svg_id}")
             return jsonify({
                 "success": False,
                 "message": "未找到对应的 SVG 或无权限修改",
@@ -143,6 +153,7 @@ def update_svg(decoded, svg_id):
         user_svg.category = category
         db.session.commit()
 
+        logger.info(f"用户 {user_id} 更新SVG成功: {svg_name}")
         return jsonify({
             "success": True,
             "message": "SVG 更新成功",
@@ -155,6 +166,7 @@ def update_svg(decoded, svg_id):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"用户 {user_id} 更新SVG失败: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"SVG 更新失败: {str(e)}",

@@ -3,3 +3,7 @@
 __pycache__
 # 忽略全局环境变量
 .env
+# 忽略日志文件
+logs
+# 忽略图片文件
+static/uploads/avatars
